@@ -1,0 +1,30 @@
+{
+  "title": "Arlo Cam API",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to arlo-cam-api",
+        "description": "Enter the local REST API URL.",
+        "data": {"base_url": "Base URL"}
+      }
+    },
+    "error": {"cannot_connect": "Unable to connect to arlo-cam-api"},
+    "abort": {"already_configured": "This server is already configured"}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Arlo and Frigate options",
+        "description": "Map serial numbers to Frigate camera names with JSON, for example {\"AAE3177HA59AC\": \"porch\"}.",
+        "data": {
+          "scan_interval": "Cached-status polling interval (seconds)",
+          "mqtt_prefix": "Frigate MQTT topic prefix",
+          "camera_map": "Serial-to-Frigate camera map (JSON)",
+          "motion_tail_seconds": "Seconds to keep Frigate enabled after motion timeout",
+          "max_active_seconds": "Maximum Frigate active time without a timeout webhook"
+        }
+      }
+    },
+    "error": {"invalid_json": "Enter a valid JSON object"}
+  }
+}

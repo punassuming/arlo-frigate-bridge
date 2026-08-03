@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+arlo.db
+frigate.db
+storage/
+recordings/
+clips/

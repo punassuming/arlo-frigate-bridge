@@ -1,0 +1,4 @@
+default_config:
+
+# Install the MQTT integration from Settings > Devices & services.
+# Add Frigate through HACS separately; this integration controls its MQTT enabled topics.

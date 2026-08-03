@@ -1,0 +1,24 @@
+logLevel: info
+rtspAddress: :8554
+
+paths:
+  arlo_gate:
+    source: rtsp://172.14.1.174/live
+    sourceOnDemand: yes
+    sourceOnDemandCloseAfter: 2s
+    rtspAnyPort: yes
+    maxReaders: 2
+
+  arlo_garage:
+    source: rtsp://172.14.1.97/live
+    sourceOnDemand: yes
+    sourceOnDemandCloseAfter: 2s
+    rtspAnyPort: yes
+    maxReaders: 2
+
+  arlo_porch:
+    source: rtsp://172.14.1.78/live
+    sourceOnDemand: yes
+    sourceOnDemandCloseAfter: 2s
+    rtspAnyPort: yes
+    maxReaders: 2
