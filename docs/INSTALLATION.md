@@ -62,17 +62,27 @@ Keep the MQTT prefix at `frigate` unless Frigate uses another `topic_prefix`.
 
 ## 5. Configure webhooks
 
-Open the entity named **Arlo Cam API Webhook paths**. Copy its attributes into `arlo-cam-api/config.yaml`, prefixed with the internal Home Assistant URL, for example:
+Open the entity named **Arlo Cam API Webhook paths**. Copy only the `motion`
+and `status` attributes into `arlo-cam-api/config.yaml`, prefixed with the
+internal Home Assistant URL, for example:
 
 ```text
 http://192.168.50.172:8123/api/webhook/arlo_cam_api_<entry-id>_motion
 ```
 
-Restart `arlo-cam-api` after replacing all five webhook placeholders.
+Restart `arlo-cam-api` after replacing the two webhook placeholders. The
+integration accepts webhooks only from the local network; do not route these
+URLs through Home Assistant Cloud or a public reverse proxy.
 
 ## 6. Configure Frigate
 
-Merge `examples/frigate/config.yml` into your existing Frigate configuration. Camera names must match the integration mapping. Each camera starts with `enabled: false`; the motion webhook publishes `ON` to `frigate/<camera>/enabled/set`. The motion-timeout webhook starts a tail timer and publishes `OFF` afterward. A separate maximum-active timer prevents a missed timeout from draining the battery.
+Merge `examples/frigate/config.yml` into your existing Frigate configuration.
+Camera names must match the integration mapping exactly. Each camera starts
+with `enabled: false`; a valid Arlo motion webhook publishes `ON` to
+`frigate/<camera>/enabled/set`. The integration owns the post-motion tail and
+maximum-active timers, rather than depending on unsupported upstream timeout
+webhooks. It also subscribes to `frigate/<camera>/enabled/state`; this is the
+authoritative confirmation that Frigate applied the command.
 
 ## 7. Pair with existing Frigate devices
 

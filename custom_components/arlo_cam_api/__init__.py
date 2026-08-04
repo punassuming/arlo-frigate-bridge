@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import ArloCamApiClient
-from .const import CONF_BASE_URL, DOMAIN, PLATFORMS, WEBHOOK_KINDS
+from .const import CONF_BASE_URL, DOMAIN, PLATFORMS, WEBHOOK_KINDS, WEBHOOK_LOCAL_ONLY
 from .coordinator import ArloCoordinator, ArloRuntime
 
 
@@ -23,9 +23,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
     runtime = ArloRuntime(hass, entry, client, coordinator)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
+    await runtime.async_start()
 
     async def handle(kind: str, request: web.Request) -> web.Response:
-        payload = await request.json()
+        try:
+            payload = await request.json()
+        except (ValueError, web.HTTPException) as err:
+            raise web.HTTPBadRequest(text="Expected a JSON webhook payload") from err
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="Expected a JSON object")
         serial = str(payload.get("serial_number", ""))
         if kind == "motion" and serial:
             await runtime.motion_started(serial)
@@ -46,7 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             f"Arlo Cam API {kind}",
             webhook_id(entry.entry_id, kind),
             lambda _hass, _webhook_id, request, kind=kind: handle(kind, request),
-            local_only=False,
+            local_only=WEBHOOK_LOCAL_ONLY,
         )
 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))

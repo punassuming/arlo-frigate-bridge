@@ -8,11 +8,10 @@ import json
 import logging
 from typing import Any
 
-from homeassistant.components.mqtt import async_publish
+from homeassistant.components.mqtt import async_publish, async_subscribe
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.util import slugify
 
 from .api import ArloCamApiClient, ArloCamApiError
 from .const import (
@@ -59,10 +58,13 @@ class ArloCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 serial = str(device.get("serial_number", "")).strip()
                 if not serial:
                     continue
-                status, registration = await asyncio.gather(
-                    self.client.get_status(serial),
-                    self.client.get_registration(serial),
-                )
+                status = await self.client.get_status(serial)
+                try:
+                    registration = await self.client.get_registration(serial)
+                except ArloCamApiError:
+                    # Registration metadata is diagnostic only. Some upstream
+                    # versions do not provide this endpoint consistently.
+                    registration = {}
                 result[serial] = {
                     "device": device,
                     "status": status,
@@ -95,6 +97,8 @@ class ArloRuntime:
         self.client = client
         self.coordinator = coordinator
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._unsubscribe_frigate_state = None
+        self.frigate_requested: dict[str, bool] = {}
         self.frigate_active: dict[str, bool] = {}
 
     @property
@@ -112,21 +116,55 @@ class ArloRuntime:
             return {}
 
     def camera_name(self, serial: str) -> str:
-        mapped = self.camera_map().get(serial)
-        if mapped:
-            return slugify(mapped)
-        camera = (self.coordinator.data or {}).get(serial, {})
-        device = camera.get("device", {})
-        friendly = device.get("friendly_name") or device.get("hostname") or serial
-        return slugify(str(friendly))
+        """Return the explicit Frigate camera mapping, never an inferred topic."""
+        return self.camera_map().get(serial, "")
 
-    async def set_frigate(self, serial: str, enabled: bool) -> None:
+    async def async_start(self) -> None:
+        """Subscribe to Frigate's authoritative camera-enabled state."""
+        topic = f"{self.mqtt_prefix}/+/enabled/state"
+        self._unsubscribe_frigate_state = await async_subscribe(
+            self.hass, topic, self._handle_frigate_state
+        )
+
+    @property
+    def configured_serials(self) -> set[str]:
+        """Return cameras eligible to control Frigate through MQTT."""
+        return set(self.camera_map())
+
+    @property
+    def _camera_to_serial(self) -> dict[str, str]:
+        return {camera: serial for serial, camera in self.camera_map().items()}
+
+    def _handle_frigate_state(self, message) -> None:
+        """Record an acknowledgement from Frigate, not merely a published command."""
+        suffix = "/enabled/state"
+        if not message.topic.startswith(f"{self.mqtt_prefix}/") or not message.topic.endswith(suffix):
+            return
+        camera = message.topic[len(self.mqtt_prefix) + 1 : -len(suffix)]
+        serial = self._camera_to_serial.get(camera)
+        if serial is None:
+            return
+        payload = message.payload.strip().upper()
+        if payload not in {"ON", "OFF"}:
+            _LOGGER.warning("Ignoring unexpected Frigate enabled state for %s: %s", camera, payload)
+            return
+        self.frigate_active[serial] = payload == "ON"
+        self.coordinator.async_update_listeners()
+
+    async def set_frigate(self, serial: str, enabled: bool) -> bool:
         camera = self.camera_name(serial)
+        if not camera:
+            _LOGGER.warning("Ignoring Frigate command for unmapped Arlo serial %s", serial)
+            return False
         topic = f"{self.mqtt_prefix}/{camera}/enabled/set"
         await async_publish(self.hass, topic, "ON" if enabled else "OFF", qos=1, retain=False)
-        self.frigate_active[serial] = enabled
+        self.frigate_requested[serial] = enabled
+        return True
 
     async def motion_started(self, serial: str) -> None:
+        if serial not in self.configured_serials:
+            _LOGGER.warning("Ignoring motion webhook for unmapped Arlo serial %s", serial)
+            return
         await self.set_frigate(serial, True)
         self._replace_timer(serial, int(self.entry.options.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE)))
 
@@ -149,6 +187,9 @@ class ArloRuntime:
             self._tasks.pop(serial, None)
 
     async def shutdown(self) -> None:
+        if self._unsubscribe_frigate_state is not None:
+            self._unsubscribe_frigate_state()
+            self._unsubscribe_frigate_state = None
         for task in self._tasks.values():
             task.cancel()
         self._tasks.clear()

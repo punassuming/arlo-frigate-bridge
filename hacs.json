@@ -1,5 +1,4 @@
 {
   "name": "Arlo Cam API",
-  "render_readme": true,
-  "domains": ["arlo_cam_api"]
+  "render_readme": true
 }
