@@ -1,0 +1,42 @@
+name: PR deployment version
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Derive deployment version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          base_version="$(jq -r '.version' custom_components/arlo_cam_api/manifest.json)"
+          if ! [[ "$base_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Manifest version must be a stable semantic version" >&2
+            exit 1
+          fi
+          candidate_version="${base_version}-pr.${PR_NUMBER}.${RUN_NUMBER}"
+          echo "value=${candidate_version}" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "${candidate_version}" > deployment-version.txt
+          {
+            echo "## Candidate deployment version"
+            echo
+            echo "\`${candidate_version}\`"
+            echo
+            echo "Use this as \`--deployment-version\` when generating a PR deployment."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployment-version
+          path: deployment-version.txt
+          if-no-files-found: error

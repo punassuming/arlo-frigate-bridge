@@ -23,6 +23,10 @@ numbers, MQTT credentials, and service hostnames. This file is Git-ignored.
 Camera `id` values must be unique lowercase identifiers using letters, numbers,
 and underscores; they become the Frigate and MediaMTX path names.
 
+Set `deployment.version` for each deployment change and pin both image values
+to a tag or digest. The generator rejects `latest`, preventing unreviewed image
+changes during a redeploy.
+
 ## 3. Install through HACS
 
 1. Open HACS → **Integrations**.
@@ -46,9 +50,25 @@ python scripts/generate_deployment.py \
 
 Copy the generated files into the respective service configuration locations:
 
+- `generated/docker-compose.yml`
 - `generated/arlo-cam-api/config.yaml`
 - `generated/mediamtx/mediamtx.yml`
 - `generated/frigate/config.yml`
+
+Keep `generated/deployment-manifest.json` alongside the deployed files. It
+records the deployment version, image references, and SHA-256 hashes so you can
+verify the exact configuration in use.
+
+For a pull-request deployment, use the candidate shown by the **PR deployment
+version** check:
+
+```bash
+python scripts/generate_deployment.py \
+  --inventory config/inventory.json \
+  --output generated \
+  --home-assistant-entry-id YOUR_ENTRY_ID \
+  --deployment-version CANDIDATE_VERSION
+```
 
 Use `generated/home-assistant/options.json` as the values for the integration's
 **Configure** dialog. The serial-to-camera map and MQTT prefix must match the
@@ -56,12 +76,11 @@ generated Frigate configuration exactly.
 
 ## 5. Start and validate
 
-Create the `arlo-cam-api` database and start the containers using the supplied
-Docker Compose file:
+Create the `arlo-cam-api` database and start the generated Compose deployment:
 
 ```bash
 touch arlo-cam-api/arlo.db
-docker compose up -d
+docker compose -f generated/docker-compose.yml up -d
 curl -s http://ARLO_CAM_API_HOST:5000/device | jq
 ```
 
