@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 .venv/
 .env
+config/inventory.json
+generated/
 arlo.db
 frigate.db
 storage/
