@@ -23,5 +23,6 @@ async def async_get_config_entry_diagnostics(
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
         "options": dict(entry.options),
         "cameras": async_redact_data(runtime.coordinator.data or {}, TO_REDACT),
+        "frigate_requested": dict(runtime.frigate_requested),
         "frigate_active": dict(runtime.frigate_active),
     }

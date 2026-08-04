@@ -3,18 +3,20 @@ VideoAntiFlickerRate: 60
 VideoQualityDefault: "default"
 NotifyRegisteredAndStatusUpdate: true
 NotifyOnMotionAlert: true
-NotifyOnMotionTimeoutAlert: true
+NotifyOnMotionTimeoutAlert: false
 NotifyOnAudioAlert: false
-NotifyOnButtonPressAlert: true
+NotifyOnButtonPressAlert: false
 
-# Replace WEBHOOK_BASE and each webhook ID using the attributes of
+# Replace the two webhook IDs using the attributes of
 # sensor.arlo_cam_api_webhook_paths after installing the integration.
 MotionRecordingWebHookUrl: "http://192.168.50.172:8123/api/webhook/REPLACE_MOTION_ID"
-MotionTimeoutWebHookUrl: "http://192.168.50.172:8123/api/webhook/REPLACE_MOTION_TIMEOUT_ID"
 StatusUpdateWebHookUrl: "http://192.168.50.172:8123/api/webhook/REPLACE_STATUS_ID"
-RegistrationWebHookUrl: "http://192.168.50.172:8123/api/webhook/REPLACE_REGISTRATION_ID"
-ButtonPressWebHookUrl: "http://192.168.50.172:8123/api/webhook/REPLACE_BUTTON_ID"
 
-# Upstream placeholders; native audio-alert webhook processing is unfinished.
+# Upstream currently documents only the motion-recording and status-update
+# webhooks as functional. The integration resets its own post-motion timer.
+# Keep unsupported webhook types disabled instead of relying on them.
+MotionTimeoutWebHookUrl: "http://127.0.0.1:9/disabled"
+RegistrationWebHookUrl: "http://127.0.0.1:9/disabled"
+ButtonPressWebHookUrl: "http://127.0.0.1:9/disabled"
 AudioRecordingWebHookUrl: "http://127.0.0.1:9/disabled"
 UserRecordingWebHookUrl: "http://127.0.0.1:9/disabled"

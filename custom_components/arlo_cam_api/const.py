@@ -19,4 +19,8 @@ DEFAULT_MQTT_PREFIX = "frigate"
 DEFAULT_MOTION_TAIL = 15
 DEFAULT_MAX_ACTIVE = 180
 
+# Arlo cameras and arlo-cam-api must be on a trusted local network. Webhooks
+# are intentionally not exposed through Home Assistant Cloud or a public proxy.
+WEBHOOK_LOCAL_ONLY = True
+
 WEBHOOK_KINDS = ("motion", "motion_timeout", "status", "registration", "button")

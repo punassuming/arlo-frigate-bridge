@@ -1,5 +1,72 @@
 # Troubleshooting
 
+## Troubleshoot a camera that responds to MQTT but does not wake on motion
+
+MQTT cannot wake a battery Arlo camera. It only enables Frigate *after* the
+camera PIR has detected motion and `arlo-cam-api` has delivered a motion
+webhook. Test each boundary in order; do not start with Frigate.
+
+### 1. Prove camera-to-API motion
+
+Trigger PIR motion and watch the API container:
+
+```bash
+docker logs -f arlo-cam-api
+```
+
+You must see a motion event. If not, check that the camera is registered,
+`PIRTargetState` is `Armed`, Wi-Fi signal is strong, and the camera VLAN can
+reach the emulated base station on TCP 4000. MQTT settings cannot repair this
+stage.
+
+If the camera was previously streaming and now ignores motion, stop every live
+viewer, Frigate/go2rtc reader, VLC session, and RTSP test client. A battery
+camera can remain stuck after an RTSP client fails to send a teardown. Reboot
+the camera (or remove its battery briefly) and test with exactly one reader.
+
+### 2. Prove API-to-Home-Assistant webhook delivery
+
+The API log should show an HTTP `200` response for the configured motion URL.
+Then inspect Home Assistant logs for `arlo_cam_api`. The URL must target the
+internal Home Assistant address and use the `motion` webhook ID exposed by
+`sensor.arlo_cam_api_webhook_paths`. Public proxies and Home Assistant Cloud
+URLs are intentionally rejected.
+
+### 3. Prove Home-Assistant-to-Frigate MQTT delivery
+
+Subscribe before causing another motion event:
+
+```bash
+mosquitto_sub -v -t 'frigate/+/enabled/#'
+```
+
+Expect both a command and confirmation, for example:
+
+```text
+frigate/arlo_porch/enabled/set ON
+frigate/arlo_porch/enabled/state ON
+```
+
+If `set` appears without `state`, verify that the broker, Frigate
+`topic_prefix`, and exact camera name in the integration's serial-to-camera
+map agree. The integration's Frigate switch reports the confirmed `state`, not
+just the requested command.
+
+### 4. Prove Frigate-to-MediaMTX streaming
+
+Only after the state is `ON`, watch both logs:
+
+```bash
+docker logs -f frigate
+docker logs -f mediamtx
+```
+
+There should be one MediaMTX source connection to the Arlo camera. If it is
+immediately closed or repeatedly reconnects, inspect RTSP transport and VLAN
+firewall rules. Do not leave a Frigate live view or any second RTSP reader
+open while testing, since it can keep the battery camera awake even when the
+Frigate camera is disabled.
+
 ## Camera appears in arlo-cam-api but Frigate has no frames
 
 1. Confirm MediaMTX can reach `rtsp://CAMERA_IP/live`.
@@ -17,11 +84,10 @@
 
 ## Motion does not enable Frigate
 
-- Inspect `sensor.arlo_cam_api_webhook_paths`.
-- Confirm the exact URLs are in `arlo-cam-api/config.yaml`.
-- Set `NotifyOnMotionAlert: true` and `NotifyOnMotionTimeoutAlert: true`.
-- Verify the serial-to-camera JSON mapping.
-- Subscribe to `frigate/+/enabled/set` in Home Assistant MQTT diagnostics.
+- Follow the four boundary checks above.
+- Set `NotifyOnMotionAlert: true`; do not rely on the upstream timeout webhook.
+- Verify the serial-to-camera JSON mapping uses the exact Frigate camera name.
+- Check both `frigate/+/enabled/set` and `frigate/+/enabled/state`.
 
 ## Spotlight still turns on
 

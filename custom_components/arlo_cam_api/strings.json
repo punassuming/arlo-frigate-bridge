@@ -8,7 +8,10 @@
         "data": {"base_url": "Base URL"}
       }
     },
-    "error": {"cannot_connect": "Unable to connect to arlo-cam-api"},
+    "error": {
+      "cannot_connect": "Unable to connect to arlo-cam-api",
+      "invalid_url": "Enter a credential-free HTTP or HTTPS URL"
+    },
     "abort": {"already_configured": "This server is already configured"}
   },
   "options": {
@@ -25,6 +28,10 @@
         }
       }
     },
-    "error": {"invalid_json": "Enter a valid JSON object"}
+    "error": {
+      "invalid_json": "Enter a valid JSON object with unique, safe Frigate camera names",
+      "invalid_mqtt_prefix": "Enter a non-empty MQTT prefix without + or #",
+      "max_active_too_short": "Maximum active time must be at least the motion tail"
+    }
   }
 }
