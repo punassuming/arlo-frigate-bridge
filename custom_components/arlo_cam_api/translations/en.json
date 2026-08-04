@@ -18,7 +18,7 @@
     "step": {
       "init": {
         "title": "Arlo and Frigate options",
-        "description": "Map serial numbers to Frigate camera names with JSON, for example {\"AAE3177HA59AC\": \"porch\"}.",
+        "description": "Map each Arlo serial number to one exact Frigate camera name, for example serial AAE3177HA59AC mapped to porch.",
         "data": {
           "scan_interval": "Cached-status polling interval (seconds)",
           "mqtt_prefix": "Frigate MQTT topic prefix",
