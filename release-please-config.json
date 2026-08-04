@@ -1,0 +1,16 @@
+{
+  "packages": {
+    ".": {
+      "package-name": "arlo-cam-api",
+      "release-type": "simple",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "custom_components/arlo_cam_api/manifest.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

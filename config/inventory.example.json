@@ -1,4 +1,9 @@
 {
+  "deployment": {
+    "version": "1.0.0",
+    "arlo_cam_api_image": "bschrameck/arlo-cam-api:1782907752",
+    "mediamtx_image": "bluenviron/mediamtx:1.19.3"
+  },
   "home_assistant": {
     "url": "http://home-assistant.local:8123"
   },

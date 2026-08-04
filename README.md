@@ -40,8 +40,16 @@ python scripts/generate_deployment.py \
   --home-assistant-entry-id YOUR_ENTRY_ID
 ```
 
-The command creates configuration for Arlo Cam API, MediaMTX, Frigate, and
-Home Assistant integration options under `generated/`.
+The command creates a versioned Docker Compose file plus configuration for Arlo
+Cam API, MediaMTX, Frigate, and Home Assistant integration options under
+`generated/`. It also writes `deployment-manifest.json`, which records the
+deployment version, immutable image references, and SHA-256 hashes for every
+generated file.
+
+On pull requests, CI derives a traceable prerelease version from the manifest
+version, PR number, and run number. Download the `deployment-version` artifact
+or copy the check summary value, then pass it to the generator with
+`--deployment-version` for a PR deployment.
 
 ## Important boundaries
 
