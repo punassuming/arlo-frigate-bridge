@@ -18,7 +18,7 @@
     "step": {
       "init": {
         "title": "Arlo and Frigate options",
-        "description": "Map each Arlo serial number to one exact Frigate camera name, for example serial AAE3177HA59AC mapped to porch.",
+        "description": "Map each Arlo serial number to one exact Frigate camera name.",
         "data": {
           "scan_interval": "Cached-status polling interval (seconds)",
           "mqtt_prefix": "Frigate MQTT topic prefix",

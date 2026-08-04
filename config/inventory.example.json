@@ -1,0 +1,19 @@
+{
+  "home_assistant": {
+    "url": "http://home-assistant.local:8123"
+  },
+  "frigate": {
+    "mqtt_host": "mqtt.local",
+    "mqtt_user": "frigate",
+    "mqtt_password": "change-me",
+    "mqtt_topic_prefix": "frigate",
+    "mediamtx_host": "mediamtx.local"
+  },
+  "cameras": [
+    {
+      "id": "camera_1",
+      "address": "camera-1.local",
+      "serial": "CAMERA_SERIAL_1"
+    }
+  ]
+}

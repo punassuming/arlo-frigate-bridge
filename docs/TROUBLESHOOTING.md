@@ -43,8 +43,8 @@ mosquitto_sub -v -t 'frigate/+/enabled/#'
 Expect both a command and confirmation, for example:
 
 ```text
-frigate/arlo_porch/enabled/set ON
-frigate/arlo_porch/enabled/state ON
+frigate/camera_1/enabled/set ON
+frigate/camera_1/enabled/state ON
 ```
 
 If `set` appears without `state`, verify that the broker, Frigate

@@ -13,7 +13,7 @@ CONF_CAMERA_MAP = "camera_map"
 CONF_MOTION_TAIL = "motion_tail_seconds"
 CONF_MAX_ACTIVE = "max_active_seconds"
 
-DEFAULT_BASE_URL = "http://192.168.50.100:5000"
+DEFAULT_BASE_URL = "http://arlo-cam-api.local:5000"
 DEFAULT_SCAN_INTERVAL = 300
 DEFAULT_MQTT_PREFIX = "frigate"
 DEFAULT_MOTION_TAIL = 15
