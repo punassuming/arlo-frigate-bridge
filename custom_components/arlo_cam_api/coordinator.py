@@ -10,7 +10,8 @@ from typing import Any
 
 from homeassistant.components.mqtt import async_publish, async_subscribe
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import ArloCamApiClient, ArloCamApiError
@@ -98,6 +99,8 @@ class ArloRuntime:
         self.coordinator = coordinator
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._unsubscribe_frigate_state = None
+        self._unsubscribe_frigate_availability = None
+        self._unsubscribe_home_assistant_started = None
         self.frigate_requested: dict[str, bool] = {}
         self.frigate_active: dict[str, bool] = {}
 
@@ -125,6 +128,15 @@ class ArloRuntime:
         self._unsubscribe_frigate_state = await async_subscribe(
             self.hass, topic, self._handle_frigate_state
         )
+        self._unsubscribe_frigate_availability = await async_subscribe(
+            self.hass, f"{self.mqtt_prefix}/available", self._handle_frigate_availability
+        )
+        if self.hass.is_running:
+            await self.async_force_all_off()
+        else:
+            self._unsubscribe_home_assistant_started = self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, self._handle_home_assistant_started
+            )
 
     @property
     def configured_serials(self) -> set[str]:
@@ -152,12 +164,15 @@ class ArloRuntime:
         self.coordinator.async_update_listeners()
 
     async def set_frigate(self, serial: str, enabled: bool) -> bool:
+        return await self._set_frigate(serial, enabled)
+
+    async def _set_frigate(self, serial: str, enabled: bool, *, retain: bool = False) -> bool:
         camera = self.camera_name(serial)
         if not camera:
             _LOGGER.warning("Ignoring Frigate command for unmapped Arlo serial %s", serial)
             return False
         topic = f"{self.mqtt_prefix}/{camera}/enabled/set"
-        await async_publish(self.hass, topic, "ON" if enabled else "OFF", qos=1, retain=False)
+        await async_publish(self.hass, topic, "ON" if enabled else "OFF", qos=1, retain=retain)
         self.frigate_requested[serial] = enabled
         return True
 
@@ -169,7 +184,25 @@ class ArloRuntime:
         self._replace_timer(serial, int(self.entry.options.get(CONF_MAX_ACTIVE, DEFAULT_MAX_ACTIVE)))
 
     async def motion_stopped(self, serial: str) -> None:
+        if serial not in self.configured_serials:
+            _LOGGER.warning("Ignoring motion timeout webhook for unmapped Arlo serial %s", serial)
+            return
         self._replace_timer(serial, int(self.entry.options.get(CONF_MOTION_TAIL, DEFAULT_MOTION_TAIL)))
+
+    def _handle_home_assistant_started(self, _event: Event) -> None:
+        self.hass.async_create_task(self.async_force_all_off())
+
+    def _handle_frigate_availability(self, message) -> None:
+        if message.payload.strip().lower() == "online":
+            self.hass.async_create_task(self.async_force_all_off())
+
+    async def async_force_all_off(self) -> None:
+        """Return every mapped battery camera to its safe disabled state."""
+        for task in self._tasks.values():
+            task.cancel()
+        self._tasks.clear()
+        for serial in self.configured_serials:
+            await self._set_frigate(serial, False, retain=True)
 
     def _replace_timer(self, serial: str, delay: int) -> None:
         old = self._tasks.pop(serial, None)
@@ -190,6 +223,12 @@ class ArloRuntime:
         if self._unsubscribe_frigate_state is not None:
             self._unsubscribe_frigate_state()
             self._unsubscribe_frigate_state = None
+        if self._unsubscribe_frigate_availability is not None:
+            self._unsubscribe_frigate_availability()
+            self._unsubscribe_frigate_availability = None
+        if self._unsubscribe_home_assistant_started is not None:
+            self._unsubscribe_home_assistant_started()
+            self._unsubscribe_home_assistant_started = None
         for task in self._tasks.values():
             task.cancel()
         self._tasks.clear()

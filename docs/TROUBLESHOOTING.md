@@ -20,7 +20,7 @@ reach the emulated base station on TCP 4000. MQTT settings cannot repair this
 stage.
 
 If the camera was previously streaming and now ignores motion, stop every live
-viewer, Frigate/go2rtc reader, VLC session, and RTSP test client. A battery
+viewer, Frigate/MediaMTX reader, VLC session, and RTSP test client. A battery
 camera can remain stuck after an RTSP client fails to send a teardown. Reboot
 the camera (or remove its battery briefly) and test with exactly one reader.
 
@@ -73,7 +73,7 @@ Frigate camera is disabled.
 2. Confirm the MediaMTX path uses `sourceOnDemand: yes` and `rtspAnyPort: yes`.
 3. Confirm only one process connects directly to the camera.
 4. Inspect MediaMTX logs for RTSP timeout.
-5. Confirm Frigate reads the MediaMTX/go2rtc restream rather than the camera IP.
+5. Confirm Frigate reads the MediaMTX restream rather than the camera IP.
 
 ## Home Assistant entities are unavailable
 
@@ -101,4 +101,5 @@ Frigate camera is disabled.
 - Turn on the camera **Microphone** switch.
 - Verify the source stream actually contains audio with `ffprobe`.
 - Use the AAC recording preset.
-- Use go2rtc for live audio; jsmpeg fallback has no audio.
+- Add an audio role and compatible Frigate recording/live settings to the
+  private Frigate baseline when audio is required.

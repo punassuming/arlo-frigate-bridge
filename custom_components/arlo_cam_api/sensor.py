@@ -73,7 +73,7 @@ class ArloWebhookSensor(ArloServerEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
-        return {
+        return {"entry_id": self.runtime.entry.entry_id, **{
             kind: f"/api/webhook/{webhook_id(self.runtime.entry.entry_id, kind)}"
             for kind in WEBHOOK_KINDS
-        }
+        }}

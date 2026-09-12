@@ -18,7 +18,9 @@ Turning it on sends `NightModeLightSourceAlert: 1` and `PIRAction: Stream+Spotli
 
 ## Audio
 
-**Microphone** sets `AudioMicEnable`. Frigate must also retain or transcode the audio stream. The example uses `preset-record-generic-audio-aac` and go2rtc Opus conversion for browser live view.
+**Microphone** sets `AudioMicEnable`. Audio retention and browser-live audio are
+Frigate deployment concerns and are deliberately not enabled by the battery
+camera patch unless the private Frigate baseline adds an audio role.
 
 **Speaker enabled** only toggles `AudioSpkrEnable`. It does not implement two-way talk or feed audio back to the camera.
 
