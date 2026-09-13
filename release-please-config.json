@@ -1,7 +1,7 @@
 {
   "packages": {
     ".": {
-      "package-name": "arlo-cam-api",
+      "package-name": "arlo-frigate-bridge",
       "release-type": "simple",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [

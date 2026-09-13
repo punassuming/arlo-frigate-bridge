@@ -1,9 +1,9 @@
 {
-  "title": "Arlo Cam API",
+  "title": "Arlo Frigate Bridge",
   "config": {
     "step": {
       "user": {
-        "title": "Connect to arlo-cam-api",
+        "title": "Connect to Arlo CAM API",
         "description": "Enter the local REST API URL.",
         "data": {"base_url": "Base URL"}
       }
