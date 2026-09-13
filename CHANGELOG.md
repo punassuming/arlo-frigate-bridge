@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/punassuming/hass-arlo-custom/compare/arlo-cam-api-v0.2.0...arlo-cam-api-v0.3.0) (2026-09-13)
+
+
+### Features
+
+* **deployment:** consolidate Arlo Frigate configuration ([#5](https://github.com/punassuming/hass-arlo-custom/issues/5)) ([6ee4018](https://github.com/punassuming/hass-arlo-custom/commit/6ee4018ed4fef03603a4e234ff8c764b6ffc97fd))
+* **release:** automate deployment versioning ([952fab8](https://github.com/punassuming/hass-arlo-custom/commit/952fab83086593946e5ee14e2b59be0ee3956078))
+* **release:** automate deployment versioning ([423b276](https://github.com/punassuming/hass-arlo-custom/commit/423b27665484340cfea6266d3040ac2ba3ada30b))
+
 ## [0.2.0](https://github.com/punassuming/hass-arlo-custom/compare/arlo-cam-api-v0.1.0...arlo-cam-api-v0.2.0) (2026-08-04)
 
 
