@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Generate private Arlo, MediaMTX, and Frigate configuration from inventory.
-
-The inventory is deliberately ignored by Git. Keep camera addresses, serials,
-credentials, and Home Assistant entry IDs out of the repository.
-"""
+"""Render a private Arlo CAM API deployment from a YAML inventory."""
 
 from __future__ import annotations
 
@@ -15,258 +11,187 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import yaml
+
 CAMERA_ID = re.compile(r"^[a-z0-9_]+$")
 DEPLOYMENT_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$")
 
 
-def quoted(value: str) -> str:
-    """Return a JSON string, which is also safe YAML scalar syntax."""
-    return json.dumps(value)
+def _error(message: str) -> None:
+    raise SystemExit(message)
+
+
+def _mapping(value: Any, name: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        _error(f"{name} must be a mapping")
+    return value
+
+
+def _string(value: Any, name: str) -> str:
+    result = str(value or "").strip()
+    if not result:
+        _error(f"{name} is required")
+    return result
 
 
 def read_inventory(path: Path) -> dict[str, Any]:
-    """Read and validate the minimal private deployment inventory."""
+    """Read and validate the private YAML deployment inventory."""
     try:
-        data = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as err:
-        raise SystemExit(f"Cannot read inventory {path}: {err}") from err
-
-    if not isinstance(data, dict):
-        raise SystemExit("Inventory must be a JSON object")
-    required_sections = {"deployment", "home_assistant", "frigate", "cameras"}
-    if not required_sections.issubset(data):
-        raise SystemExit("Inventory requires deployment, home_assistant, frigate, and cameras")
-
-    deployment = data["deployment"]
-    home_assistant = data["home_assistant"]
-    frigate = data["frigate"]
-    cameras = data["cameras"]
-    if not isinstance(deployment, dict) or not isinstance(home_assistant, dict) or not isinstance(frigate, dict):
-        raise SystemExit("deployment, home_assistant, and frigate must be objects")
-    if not isinstance(cameras, list) or not cameras:
-        raise SystemExit("cameras must be a non-empty array")
-
-    url = str(home_assistant.get("url", "")).rstrip("/")
-    parsed = urlsplit(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise SystemExit("home_assistant.url must be an absolute HTTP(S) URL")
-
-    version = str(deployment.get("version", ""))
-    if not DEPLOYMENT_VERSION.fullmatch(version):
-        raise SystemExit("deployment.version must be a semantic version, for example 1.0.0")
-    for image_key in ("arlo_cam_api_image", "mediamtx_image"):
-        image = str(deployment.get(image_key, ""))
-        if not image or image.endswith(":latest") or (":" not in image and "@sha256:" not in image):
-            raise SystemExit(f"deployment.{image_key} must be pinned to a tag or digest, never latest")
-
-    required_frigate = {
-        "mqtt_host",
-        "mqtt_user",
-        "mqtt_password",
-        "mqtt_topic_prefix",
-        "mediamtx_host",
-    }
-    missing = sorted(required_frigate - frigate.keys())
+        data = yaml.safe_load(path.read_text())
+    except (OSError, yaml.YAMLError) as err:
+        _error(f"Cannot read inventory {path}: {err}")
+    data = _mapping(data, "Inventory")
+    required = {"deployment", "home_assistant", "camera_host", "frigate", "cameras"}
+    missing = sorted(required - data.keys())
     if missing:
-        raise SystemExit(f"frigate is missing: {', '.join(missing)}")
+        _error(f"Inventory is missing: {', '.join(missing)}")
 
-    camera_ids: set[str] = set()
-    serials: set[str] = set()
-    for camera in cameras:
-        if not isinstance(camera, dict):
-            raise SystemExit("Each camera must be an object")
-        camera_id = str(camera.get("id", ""))
-        address = str(camera.get("address", "")).strip()
-        serial = str(camera.get("serial", "")).strip()
+    deployment = _mapping(data["deployment"], "deployment")
+    home_assistant = _mapping(data["home_assistant"], "home_assistant")
+    camera_host = _mapping(data["camera_host"], "camera_host")
+    frigate = _mapping(data["frigate"], "frigate")
+    cameras = data["cameras"]
+    if not isinstance(cameras, list) or not cameras:
+        _error("cameras must be a non-empty list")
+
+    version = _string(deployment.get("version"), "deployment.version")
+    if not DEPLOYMENT_VERSION.fullmatch(version):
+        _error("deployment.version must be a semantic version, for example 1.0.0")
+    for key in ("arlo_cam_api_image", "mediamtx_image"):
+        image = _string(deployment.get(key), f"deployment.{key}")
+        if image.endswith(":latest") or (":" not in image and "@sha256:" not in image):
+            _error(f"deployment.{key} must be pinned to a tag or digest, never latest")
+
+    url = _string(home_assistant.get("internal_url"), "home_assistant.internal_url").rstrip("/")
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        _error("home_assistant.internal_url must be a credential-free absolute HTTP(S) URL")
+    motion_tail = int(home_assistant.get("motion_tail_seconds", 15))
+    max_active = int(home_assistant.get("max_active_seconds", 180))
+    if motion_tail < 0 or max_active < 30 or max_active < motion_tail:
+        _error("home_assistant timer values must be non-negative and max_active must cover the motion tail")
+
+    for key in ("bind_address", "api_port"):
+        _string(camera_host.get(key), f"camera_host.{key}")
+    mqtt = _mapping(frigate.get("mqtt"), "frigate.mqtt")
+    for key in ("host", "port", "user", "password", "topic_prefix", "client_id"):
+        _string(mqtt.get(key), f"frigate.mqtt.{key}")
+    _string(frigate.get("mediamtx_host"), "frigate.mediamtx_host")
+    _mapping(frigate.get("baseline"), "frigate.baseline")
+
+    seen_ids: set[str] = set()
+    seen_serials: set[str] = set()
+    for index, camera in enumerate(cameras):
+        camera = _mapping(camera, f"cameras[{index}]")
+        camera_id = _string(camera.get("id"), f"cameras[{index}].id")
+        serial = _string(camera.get("serial"), f"cameras[{index}].serial")
+        address = _string(camera.get("address"), f"cameras[{index}].address")
         if not CAMERA_ID.fullmatch(camera_id):
-            raise SystemExit("Camera id must use lowercase letters, numbers, and underscores")
-        if not address or "/" in address or not serial:
-            raise SystemExit("Each camera requires a host/IP address and serial")
-        if camera_id in camera_ids or serial in serials:
-            raise SystemExit("Camera ids and serials must be unique")
-        camera_ids.add(camera_id)
-        serials.add(serial)
+            _error("Camera id must use lowercase letters, numbers, and underscores")
+        if "/" in address or camera_id in seen_ids or serial in seen_serials:
+            _error("Camera IDs, serials, and addresses must be unique and valid")
+        seen_ids.add(camera_id)
+        seen_serials.add(serial)
     return data
 
 
+def yaml_text(value: Any) -> str:
+    return yaml.safe_dump(value, sort_keys=False, default_flow_style=False, allow_unicode=True)
+
+
 def write(path: Path, content: str, version: str, *, header: bool = True) -> None:
-    """Write one generated file, creating only its parent directory."""
     path.parent.mkdir(parents=True, exist_ok=True)
     prefix = f"# Deployment version {version}; generated by scripts/generate_deployment.py. Do not edit.\n" if header else ""
     path.write_text(prefix + content)
 
 
-def generate(
-    inventory: dict[str, Any], output: Path, entry_id: str, deployment_version: str | None
-) -> None:
-    """Render all service configuration files from a single inventory."""
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", entry_id):
-        raise SystemExit("home-assistant-entry-id contains unsupported characters")
-    if deployment_version is not None:
-        if not DEPLOYMENT_VERSION.fullmatch(deployment_version):
-            raise SystemExit("deployment-version must be a semantic version")
-        inventory = {**inventory, "deployment": {**inventory["deployment"], "version": deployment_version}}
-    home_assistant = inventory["home_assistant"]
-    deployment = inventory["deployment"]
+def deep_merge(base: Any, patch: Any) -> Any:
+    """Apply the documented Frigate patch semantics without mutating inputs."""
+    if isinstance(base, dict) and isinstance(patch, dict):
+        result = dict(base)
+        for key, value in patch.items():
+            result[key] = deep_merge(result[key], value) if key in result else value
+        return result
+    return patch
+
+
+def frigate_patch(inventory: dict[str, Any]) -> dict[str, Any]:
     frigate = inventory["frigate"]
-    cameras = inventory["cameras"]
-    webhook_root = f"{str(home_assistant['url']).rstrip('/')}/api/webhook/arlo_cam_api_{entry_id}"
+    mqtt = frigate["mqtt"]
+    patch = deep_merge({}, frigate["baseline"])
+    patch["mqtt"] = {"host": mqtt["host"], "port": int(mqtt["port"]), "user": mqtt["user"], "password": mqtt["password"], "topic_prefix": mqtt["topic_prefix"], "client_id": mqtt["client_id"]}
+    cameras = dict(patch.get("cameras", {}))
+    for camera in inventory["cameras"]:
+        camera_config: dict[str, Any] = {
+            "enabled": False,
+            "ffmpeg": {"inputs": [{"path": f"rtsp://{frigate['mediamtx_host']}:8554/{camera['id']}", "roles": ["detect", "record"]}]},
+            "detect": {"enabled": True, **dict(camera.get("detect", {}))},
+        }
+        if "motion" in camera:
+            camera_config["motion"] = camera["motion"]
+        cameras[camera["id"]] = camera_config
+    patch["cameras"] = cameras
+    return patch
 
-    write(
-        output / "arlo-cam-api/config.yaml",
-        "\n".join(
-            [
-                'WifiCountryCode: "US"',
-                "NotifyRegisteredAndStatusUpdate: true",
-                "NotifyOnMotionAlert: true",
-                "NotifyOnMotionTimeoutAlert: false",
-                f"MotionRecordingWebHookUrl: {quoted(webhook_root + '_motion')}",
-                f"StatusUpdateWebHookUrl: {quoted(webhook_root + '_status')}",
-                'MotionTimeoutWebHookUrl: "http://127.0.0.1:9/disabled"',
-                'RegistrationWebHookUrl: "http://127.0.0.1:9/disabled"',
-                'ButtonPressWebHookUrl: "http://127.0.0.1:9/disabled"',
-                "",
-            ]
-        ),
-        str(deployment["version"]),
-    )
 
-    media_paths: list[str] = ["logLevel: info", "rtspAddress: :8554", "", "paths:"]
-    for camera in cameras:
-        media_paths.extend(
-            [
-                f"  {camera['id']}:",
-                f"    source: rtsp://{camera['address']}/live",
-                "    sourceOnDemand: yes",
-                "    sourceOnDemandCloseAfter: 2s",
-                "    rtspAnyPort: yes",
-                "    maxReaders: 2",
-            ]
-        )
-    write(output / "mediamtx/mediamtx.yml", "\n".join(media_paths) + "\n", str(deployment["version"]))
+def apply_frigate_patch(base_path: Path, patch: dict[str, Any], output: Path, version: str) -> None:
+    try:
+        base = yaml.safe_load(base_path.read_text()) or {}
+    except (OSError, yaml.YAMLError) as err:
+        _error(f"Cannot read Frigate base config {base_path}: {err}")
+    if not isinstance(base, dict):
+        _error("Frigate base config must be a YAML mapping")
+    write(output, yaml_text(deep_merge(base, patch)), version)
 
-    frigate_config = [
-        "mqtt:",
-        f"  host: {quoted(str(frigate['mqtt_host']))}",
-        f"  user: {quoted(str(frigate['mqtt_user']))}",
-        f"  password: {quoted(str(frigate['mqtt_password']))}",
-        f"  topic_prefix: {quoted(str(frigate['mqtt_topic_prefix']))}",
-        "",
-        "go2rtc:",
-        "  streams:",
-    ]
-    for camera in cameras:
-        camera_id = str(camera["id"])
-        frigate_config.extend(
-            [
-                f"    {camera_id}:",
-                f"      - rtsp://{frigate['mediamtx_host']}:8554/{camera_id}",
-                f"      - ffmpeg:{camera_id}#audio=opus",
-            ]
-        )
-    frigate_config.extend(["", "record:", "  enabled: true", "", "cameras:"])
-    for camera in cameras:
-        camera_id = str(camera["id"])
-        frigate_config.extend(
-            [
-                f"  {camera_id}:",
-                "    enabled: false",
-                "    ffmpeg:",
-                "      inputs:",
-                f"        - path: rtsp://127.0.0.1:8554/{camera_id}",
-                "          input_args: preset-rtsp-restream",
-                "          roles: [detect, record, audio]",
-                "    live:",
-                "      streams:",
-                f"        Main: {camera_id}",
-            ]
-        )
-    write(output / "frigate/config.yml", "\n".join(frigate_config) + "\n", str(deployment["version"]))
 
-    camera_map = {str(camera["serial"]): str(camera["id"]) for camera in cameras}
-    write(
-        output / "home-assistant/options.json",
-        json.dumps(
-            {
-                "mqtt_prefix": frigate["mqtt_topic_prefix"],
-                "camera_map": json.dumps(camera_map, sort_keys=True),
-                "motion_tail_seconds": 15,
-                "max_active_seconds": 180,
-            },
-            indent=2,
-        )
-        + "\n",
-        str(deployment["version"]),
-        header=False,
-    )
+def generate(inventory: dict[str, Any], output: Path, entry_id: str, frigate_base: Path | None) -> None:
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", entry_id):
+        _error("home-assistant-entry-id contains unsupported characters")
+    deployment = inventory["deployment"]
+    camera_host = inventory["camera_host"]
+    home_assistant = inventory["home_assistant"]
+    version = str(deployment["version"])
+    webhook_root = f"{str(home_assistant['internal_url']).rstrip('/')}/api/webhook/arlo_cam_api_{entry_id}"
 
-    write(
-        output / "docker-compose.yml",
-        "\n".join(
-            [
-                "services:",
-                "  arlo-cam-api:",
-                f"    image: {quoted(str(deployment['arlo_cam_api_image']))}",
-                "    container_name: arlo-cam-api",
-                "    network_mode: host",
-                "    restart: unless-stopped",
-                "    volumes:",
-                "      - ./arlo-cam-api/config.yaml:/opt/arlo-cam-api/config.yaml:ro",
-                "      - ./arlo-cam-api/arlo.db:/opt/arlo-cam-api/arlo.db",
-                "",
-                "  mediamtx:",
-                f"    image: {quoted(str(deployment['mediamtx_image']))}",
-                "    container_name: mediamtx",
-                "    network_mode: host",
-                "    restart: unless-stopped",
-                "    volumes:",
-                "      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro",
-                "",
-            ]
-        ),
-        str(deployment["version"]),
-    )
+    api_config = {"WifiCountryCode": inventory.get("arlo_cam_api", {}).get("wifi_country_code", "US"), "VideoAntiFlickerRate": inventory.get("arlo_cam_api", {}).get("video_anti_flicker_rate", 60), "VideoQualityDefault": inventory.get("arlo_cam_api", {}).get("video_quality_default", "high"), "NotifyRegisteredAndStatusUpdate": True, "NotifyOnMotionAlert": True, "NotifyOnMotionTimeoutAlert": True, "NotifyOnAudioAlert": False, "NotifyOnButtonPressAlert": False, "MotionRecordingWebHookUrl": webhook_root + "_motion", "MotionTimeoutWebHookUrl": webhook_root + "_motion_timeout", "StatusUpdateWebHookUrl": webhook_root + "_status", "RegistrationWebHookUrl": webhook_root + "_registration", "ButtonPressWebHookUrl": ""}
+    write(output / "camera-host/arlo-cam-api/config.yaml", yaml_text(api_config), version)
 
-    generated_files = sorted(path for path in output.rglob("*") if path.is_file())
-    manifest = {
-        "deployment_version": deployment["version"],
-        "images": {
-            "arlo_cam_api": deployment["arlo_cam_api_image"],
-            "mediamtx": deployment["mediamtx_image"],
-        },
-        "files": {
-            str(path.relative_to(output)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in generated_files
-        },
-    }
-    write(
-        output / "deployment-manifest.json",
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        str(deployment["version"]),
-        header=False,
-    )
+    paths: dict[str, Any] = {}
+    for camera in inventory["cameras"]:
+        paths[camera["id"]] = {"source": f"rtsp://{camera['address']}:554/live", "rtspTransport": "udp", "rtspAnyPort": True, "sourceOnDemand": True, "sourceOnDemandStartTimeout": "30s", "sourceOnDemandCloseAfter": "1s", "maxReaders": 1}
+    mediamtx = {"logLevel": "info", "authMethod": "internal", "authInternalUsers": [{"user": "any", "pass": "", "ips": [], "permissions": [{"action": "publish", "path": ""}, {"action": "read", "path": ""}, {"action": "playback", "path": ""}, {"action": "api", "path": ""}]}], "rtsp": True, "rtspAddress": ":8554", "api": True, "apiAddress": ":9997", "paths": paths}
+    write(output / "camera-host/mediamtx/mediamtx.yml", yaml_text(mediamtx), version)
+
+    compose = {"services": {"arlo-cam-api": {"container_name": "arlo-cam-api", "image": deployment["arlo_cam_api_image"], "restart": "unless-stopped", "security_opt": ["apparmor=unconfined"], "ports": ["4000:4000/tcp", "4000:4000/udp", "4100:4100/tcp", "4100:4100/udp", f"{camera_host['bind_address']}:{camera_host['api_port']}:5000/tcp"], "volumes": ["./arlo-cam-api/config.yaml:/opt/arlo-cam-api/config.yaml:ro", "./arlo-cam-api/arlo.db:/opt/arlo-cam-api/arlo.db"]}, "mediamtx": {"container_name": "mediamtx", "image": deployment["mediamtx_image"], "restart": "unless-stopped", "security_opt": ["apparmor=unconfined"], "ports": ["8554:8554/tcp", "8554:8554/udp", "127.0.0.1:9997:9997/tcp"], "volumes": ["./mediamtx/mediamtx.yml:/mediamtx.yml:ro"]}}}
+    write(output / "camera-host/docker-compose.yml", yaml_text(compose), version)
+
+    patch = frigate_patch(inventory)
+    write(output / "frigate/arlo-frigate.patch.yaml", yaml_text(patch), version)
+    if frigate_base is not None:
+        apply_frigate_patch(frigate_base, patch, output / "frigate/config.yml", version)
+
+    options = {"mqtt_prefix": inventory["frigate"]["mqtt"]["topic_prefix"], "camera_map": json.dumps({camera["serial"]: camera["id"] for camera in inventory["cameras"]}, sort_keys=True), "motion_tail_seconds": int(home_assistant.get("motion_tail_seconds", 15)), "max_active_seconds": int(home_assistant.get("max_active_seconds", 180))}
+    write(output / "home-assistant/options.json", json.dumps(options, indent=2) + "\n", version, header=False)
+    generated = sorted(path for path in output.rglob("*") if path.is_file())
+    manifest = {"deployment_version": version, "images": {"arlo_cam_api": deployment["arlo_cam_api_image"], "mediamtx": deployment["mediamtx_image"]}, "files": {str(path.relative_to(output)): hashlib.sha256(path.read_bytes()).hexdigest() for path in generated}}
+    write(output / "deployment-manifest.json", json.dumps(manifest, indent=2, sort_keys=True) + "\n", version, header=False)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument(
-        "--home-assistant-entry-id",
-        required=True,
-        help="Arlo Cam API config entry ID, required to build private webhook URLs",
+    entry_group = parser.add_mutually_exclusive_group(required=True)
+    entry_group.add_argument("--home-assistant-entry-id")
+    entry_group.add_argument(
+        "--bootstrap",
+        action="store_true",
+        help="Render temporary camera-host files before the Home Assistant entry exists",
     )
-    parser.add_argument(
-        "--deployment-version",
-        help="Optional semantic deployment version; overrides inventory for this generated output",
-    )
+    parser.add_argument("--frigate-base", type=Path, help="Private existing Frigate config to merge with the generated patch")
     args = parser.parse_args()
-    generate(
-        read_inventory(args.inventory),
-        args.output,
-        args.home_assistant_entry_id,
-        args.deployment_version,
-    )
+    entry_id = "bootstrap" if args.bootstrap else args.home_assistant_entry_id
+    generate(read_inventory(args.inventory), args.output, entry_id, args.frigate_base)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             status = payload.get("status")
             if isinstance(status, dict):
                 coordinator.merge_status(serial, status)
+            else:
+                # Upstream versions do not all wrap a status update in the
+                # same payload shape. Refreshing reads the local API cache and
+                # never contacts or wakes the physical camera.
+                await coordinator.async_request_refresh()
         elif kind == "registration":
             await coordinator.async_request_refresh()
         return web.Response(status=200)

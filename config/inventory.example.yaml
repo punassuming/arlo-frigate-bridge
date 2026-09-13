@@ -1,0 +1,62 @@
+# Private deployment inventory. Copy to inventory.yaml; do not commit it.
+deployment:
+  version: 1.0.0
+  arlo_cam_api_image: bschrameck/arlo-cam-api:1782907752
+  mediamtx_image: bluenviron/mediamtx:1.19.3
+home_assistant:
+  internal_url: http://home-assistant.local:8123
+  motion_tail_seconds: 15
+  max_active_seconds: 180
+camera_host:
+  bind_address: 192.0.2.10
+  api_port: 5000
+arlo_cam_api:
+  wifi_country_code: US
+  video_anti_flicker_rate: 60
+  video_quality_default: high
+frigate:
+  mediamtx_host: camera-host.local
+  mqtt:
+    host: mqtt.local
+    port: 1883
+    user: frigate
+    password: change-me
+    topic_prefix: frigate
+    client_id: frigate
+  # This baseline becomes part of the generated Arlo patch.
+  baseline:
+    detectors:
+      ov_npu: {type: openvino, device: NPU}
+    model:
+      width: 300
+      height: 300
+      input_tensor: nhwc
+      input_pixel_format: bgr
+      path: /openvino-model/ssdlite_mobilenet_v2.xml
+      labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+    record:
+      enabled: true
+      continuous: {days: 1}
+      motion: {days: 2}
+      alerts:
+        pre_capture: 5
+        post_capture: 10
+        retain: {days: 30, mode: motion}
+      detections:
+        pre_capture: 5
+        post_capture: 10
+        retain: {days: 14, mode: motion}
+    snapshots: {enabled: true, retain: {default: 1}}
+    ffmpeg: {input_args: preset-rtsp-restream, hwaccel_args: preset-intel-qsv-h264}
+    semantic_search: {enabled: true, model_size: small}
+    face_recognition: {enabled: true, model_size: small}
+    lpr: {enabled: false}
+    classification: {bird: {enabled: false}}
+    version: 0.17-0
+cameras:
+  - id: camera_1
+    serial: CAMERA_SERIAL_1
+    address: camera-1.local
+    detect: {width: 1920, height: 1072, fps: 5}
+    motion:
+      mask: 0.0,0.0,0.1,0.1

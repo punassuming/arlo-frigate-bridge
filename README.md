@@ -1,72 +1,50 @@
 # Arlo Cam API for Home Assistant and Frigate
 
-HACS-installable Home Assistant integration and deployment generator for local
-Arlo battery cameras using `brianschrameck/arlo-cam-api`, MediaMTX, Frigate,
-MQTT, and Home Assistant webhooks.
+HACS integration and private deployment generator for battery-powered Arlo
+cameras using Arlo CAM API, MediaMTX, Frigate, MQTT, and Home Assistant webhooks.
 
 ## What it provides
 
-- Arlo battery, hardware-status, and control entities
-- Motion-driven Frigate enable/disable through MQTT
-- Confirmed Frigate MQTT state rather than optimistic commands
-- Battery-safe post-motion and maximum-active timers
-- Generated Arlo, MediaMTX, Frigate, and Home Assistant options from one
-  private inventory file
+- Native Arlo hardware entities and controls in Home Assistant
+- PIR-driven Frigate enable/disable with confirmed MQTT state
+- Restart-safe battery timers and local-only webhooks
+- A YAML inventory that renders the camera-host stack and a Frigate patch
 
 ## Install
 
-Add this repository to HACS as a custom repository of type **Integration**:
+Add `https://github.com/punassuming/hass-arlo-custom` to HACS as an
+**Integration**, install it, restart Home Assistant, and add **Arlo Cam API**
+from Settings → Devices & services.
 
-```text
-https://github.com/punassuming/hass-arlo-custom
-```
-
-Then follow [the complete installation guide](docs/INSTALLATION.md).
-
-## Private deployment inventory
-
-No camera addresses, serial numbers, names, credentials, or network topology
-are stored in this repository. Copy
-[`config/inventory.example.json`](config/inventory.example.json) to
-`config/inventory.json`, fill it with your own values, and keep that file
-private. It is ignored by Git.
-
-After installing the integration, generate all deployment files with:
+Copy [`config/inventory.example.yaml`](config/inventory.example.yaml) to the
+ignored `config/inventory.yaml`, then render private deployment files:
 
 ```bash
-python scripts/generate_deployment.py \
-  --inventory config/inventory.json \
-  --output generated \
-  --home-assistant-entry-id YOUR_ENTRY_ID
+python -m pip install -r scripts/requirements.txt
+python scripts/generate_deployment.py --inventory config/inventory.yaml \
+  --output generated --bootstrap
 ```
 
-The command creates a versioned Docker Compose file plus configuration for Arlo
-Cam API, MediaMTX, Frigate, and Home Assistant integration options under
-`generated/`. It also writes `deployment-manifest.json`, which records the
-deployment version, immutable image references, and SHA-256 hashes for every
-generated file.
+Deploy that temporary camera-host configuration, create the Home Assistant
+entry, copy its `entry_id` from the **Webhook paths** diagnostic entity, then
+render the final webhook configuration:
 
-On pull requests, CI derives a traceable prerelease version from the manifest
-version, PR number, and run number. Download the `deployment-version` artifact
-or copy the check summary value, then pass it to the generator with
-`--deployment-version` for a PR deployment.
+```bash
+python scripts/generate_deployment.py --inventory config/inventory.yaml \
+  --output generated --home-assistant-entry-id YOUR_ENTRY_ID \
+  --frigate-base /private/frigate/config.yml
+```
 
-## Important boundaries
+## Boundaries
 
-- The upstream REST API is unauthenticated. Restrict TCP 5000 to Home Assistant
-  and administrative hosts.
-- Keep the private inventory and generated directory out of source control.
-- The integration controls Frigate only through MQTT; it does not wake an Arlo
-  battery camera. PIR motion must reach `arlo-cam-api` first.
-- Do not force Arlo entities into Frigate's device-registry entry; assign both
-  devices to the same Home Assistant area or label instead.
+- Arlo CAM API and MediaMTX run on the camera-side host; Frigate remains a
+  separate existing deployment.
+- The integration owns hardware status, Arlo controls, webhooks, and the
+  Frigate enable timer. Frigate owns video, detections, clips, and recordings.
+- Frigate must consume the MediaMTX restream, never an Arlo camera directly.
+- Arlo CAM API is unauthenticated: expose its API only to Home Assistant on the
+  trusted LAN. Webhooks use Home Assistant's local-only protection.
 
-## Documentation
-
-- [Installation and generated deployment](docs/INSTALLATION.md)
-- [Control behavior and audio](docs/CONTROLS.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-
-## License
-
-MIT
+See [architecture](docs/ARCHITECTURE.md), [installation](docs/INSTALLATION.md), [configuration](docs/CONFIGURATION.md),
+[reference migration](docs/MIGRATION.md), [Frigate patching](docs/FRIGATE.md), [webhooks](docs/WEBHOOKS.md), and
+[troubleshooting](docs/TROUBLESHOOTING.md).
