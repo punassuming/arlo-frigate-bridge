@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "arlo_cam_api"
-NAME = "Arlo Cam API"
+NAME = "Arlo Frigate Bridge"
 PLATFORMS = ["sensor", "binary_sensor", "switch", "select", "button"]
 
 CONF_BASE_URL = "base_url"

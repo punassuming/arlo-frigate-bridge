@@ -1,4 +1,4 @@
-# Arlo Cam API for Home Assistant and Frigate
+# Arlo Frigate Bridge
 
 HACS integration and private deployment generator for battery-powered Arlo
 cameras using Arlo CAM API, MediaMTX, Frigate, MQTT, and Home Assistant webhooks.
@@ -12,8 +12,8 @@ cameras using Arlo CAM API, MediaMTX, Frigate, MQTT, and Home Assistant webhooks
 
 ## Install
 
-Add `https://github.com/punassuming/hass-arlo-custom` to HACS as an
-**Integration**, install it, restart Home Assistant, and add **Arlo Cam API**
+Add `https://github.com/punassuming/arlo-frigate-bridge` to HACS as an
+**Integration**, install it, restart Home Assistant, and add **Arlo Frigate Bridge**
 from Settings → Devices & services.
 
 Copy [`config/inventory.example.yaml`](config/inventory.example.yaml) to the

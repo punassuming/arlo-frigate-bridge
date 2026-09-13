@@ -54,7 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         webhook.async_register(
             hass,
             DOMAIN,
-            f"Arlo Cam API {kind}",
+            f"Arlo Frigate Bridge {kind}",
             webhook_id(entry.entry_id, kind),
             lambda _hass, _webhook_id, request, kind=kind: handle(kind, request),
             local_only=WEBHOOK_LOCAL_ONLY,

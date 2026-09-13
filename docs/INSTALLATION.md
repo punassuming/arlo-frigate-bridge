@@ -7,8 +7,8 @@ where applicable, TCP/UDP 4100. Allow Home Assistant to reach the Arlo CAM API
 on the configured trusted-LAN address and port. Allow the camera host to reach
 Home Assistant's **internal** URL on TCP 8123.
 
-Install Arlo Cam API through HACS, restart Home Assistant, and create its config
-entry. Copy the serial-to-camera map and MQTT prefix from the generated
+Install Arlo Frigate Bridge through HACS, restart Home Assistant, and create its
+config entry. Copy the serial-to-camera map and MQTT prefix from the generated
 `home-assistant/options.json` into the integration Configure dialog.
 
 ## Generate and deploy
@@ -25,7 +25,7 @@ python scripts/generate_deployment.py --inventory config/inventory.yaml \
 
 Deploy `generated/camera-host/`, then add the integration using
 `http://CAMERA_HOST:API_PORT`. In Developer Tools → States, open the
-**Arlo Cam API Webhook paths** diagnostic entity and copy its `entry_id`
+**Arlo Frigate Bridge Webhook paths** diagnostic entity and copy its `entry_id`
 attribute. Render the final files with that ID:
 
 ```bash
